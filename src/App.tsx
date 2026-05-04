@@ -400,9 +400,15 @@ export default function App() {
     }
 
     try {
+      const bugWithAudit = {
+        ...newBug,
+        last_edited_at: new Date().toISOString(),
+        last_edited_by: currentUser?.full_name || currentUser?.email || "Manual Entry"
+      };
+
       const { data, error } = await supabase
         .from('bugs')
-        .insert([newBug])
+        .insert([bugWithAudit])
         .select();
 
       if (error) throw error;
@@ -571,72 +577,16 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
 
-            {activeTab === "overview" && (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4 shrink-0 px-8 mb-6">
-                <StatCard 
-                  title="Grand Total SIT" 
-                  value={sitTotalVolume} 
-                  icon={<Database />}
-                  color="blue"
-                  onClick={() => setDrilldownType("all")}
-                  clickable
-                  isPrimary
-                />
-                <StatCard 
-                  title="Detect Defects" 
-                  value={bugsCount} 
-                  icon={<BugIcon />}
-                  color="orange"
-                  onClick={() => setDrilldownType("bugs")}
-                  clickable
-                />
-                <StatCard 
-                  title="Penalty Score" 
-                  value={totalFilteredScore.toFixed(1)} 
-                  icon={<TrendingDown />}
-                  color="red"
-                  onClick={() => setDrilldownType("score")}
-                  clickable
-                />
-                <StatCard 
-                  title="Orphaned" 
-                  value={missingPeriodsCount} 
-                  icon={<Calendar />}
-                  color="red"
-                  onClick={() => setDrilldownType("missing")}
-                  clickable
-                />
-                <StatCard 
-                  title="Unmapped" 
-                  value={unmappedStatusCount} 
-                  icon={<AlertTriangle />}
-                  color="amber"
-                  onClick={() => setDrilldownType("unmapped")}
-                  clickable
-                />
-                <StatCard 
-                  title="Top Risk" 
-                  value={topOffender.split(' ')[0] || "N/A"} 
-                  icon={<Users />}
-                  color="purple"
-                  onClick={() => {
-                    const offender = devStats[0];
-                    if (offender) setSelectedDev(offender.devName);
-                  }}
-                  clickable
-                />
-              </div>
-            )}
-
-            {/* INTEGRATED FILTER BAR (Sticky) */}
-            <div className="px-8 mb-4 shrink-0">
-              <div className="grid grid-cols-12 gap-4 items-center bg-slate-900/40 p-2 rounded-2xl border border-white/5 shadow-inner">
-              <div className="col-span-4 flex items-center gap-3 pl-3">
+          <div className="px-0 mt-6 shrink-0">
+            {/* INTEGRATED FILTER BAR (Inside Header for Total Stickiness) */}
+            <div className="grid grid-cols-12 gap-4 items-center bg-slate-900/40 p-2 rounded-2xl border border-white/5 shadow-inner">
+              <div className="col-span-3 flex items-center gap-3 pl-3">
                 <Search className="w-4 h-4 text-slate-600 shrink-0" />
                 <input 
                   type="text" 
-                  placeholder="Smart search (Projects, Devs, Remarks)..."
+                  placeholder="Smart search (Project, Dev, Remark)..."
                   className="bg-transparent border-none focus:ring-0 text-xs text-white w-full placeholder:text-slate-700 font-medium"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -647,7 +597,7 @@ export default function App() {
                 <div className="h-6 w-px bg-slate-800" />
               </div>
 
-              <div className="col-span-7 flex items-center justify-end gap-3 pr-2">
+              <div className="col-span-8 flex items-center justify-end gap-3 pr-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Status:</span>
                   <select 
@@ -668,7 +618,7 @@ export default function App() {
                   <select 
                     value={typeFilter} 
                     onChange={(e) => setTypeFilter(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold max-w-[90px]"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold max-w-[80px]"
                   >
                     <option value="All">All Type</option>
                     <option value="Bug">Defect</option>
@@ -690,21 +640,32 @@ export default function App() {
 
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Period:</span>
-                  <select 
-                    value={startPeriode} 
-                    onChange={(e) => setStartPeriode(e.target.value)}
-                    className={cn(
-                      "bg-slate-950 border rounded-lg px-2 py-1.5 text-white text-[10px] font-bold max-w-[100px]",
-                      startPeriode === "MISSING" ? "border-red-500 text-red-500" : "border-slate-800"
-                    )}
-                  >
-                    <option value="">Month</option>
-                    <option value="MISSING">ORPHANED</option>
-                    {uniquePeriodes.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <div className="flex items-center gap-1">
+                    <select 
+                      value={startPeriode} 
+                      onChange={(e) => setStartPeriode(e.target.value)}
+                      className={cn(
+                        "bg-slate-950 border rounded-lg px-2 py-1.5 text-white text-[10px] font-bold max-w-[100px]",
+                        startPeriode === "MISSING" ? "border-red-500 text-red-500" : "border-slate-800"
+                      )}
+                    >
+                      <option value="">Start</option>
+                      <option value="MISSING">ORPHANED</option>
+                      {uniquePeriodes.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <span className="text-slate-700 text-[10px] font-bold">to</span>
+                    <select 
+                      value={endPeriode} 
+                      onChange={(e) => setEndPeriode(e.target.value)}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] font-bold max-w-[100px]"
+                    >
+                      <option value="">End</option>
+                      {uniquePeriodes.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
                 </div>
 
-                {(searchTerm || typeFilter !== "All" || severityFilter !== "All" || statusFilter !== "All" || startPeriode) && (
+                {(searchTerm || typeFilter !== "All" || severityFilter !== "All" || statusFilter !== "All" || startPeriode || (endPeriode !== uniquePeriodes[uniquePeriodes.length - 1] && endPeriode !== "")) && (
                   <button 
                     onClick={() => {
                       setSearchTerm("");
@@ -712,8 +673,9 @@ export default function App() {
                       setSeverityFilter("All");
                       setStatusFilter("All");
                       setStartPeriode("");
+                      setEndPeriode(uniquePeriodes[uniquePeriodes.length - 1] || "");
                     }}
-                    className="p-2 text-slate-500 hover:text-red-500 transition-colors"
+                    className="p-1 text-slate-500 hover:text-red-500 transition-all border border-transparent hover:border-red-500/20 rounded-md"
                   >
                     <RefreshCcw className="w-3.5 h-3.5" />
                   </button>
@@ -721,8 +683,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center flex-1">
@@ -813,6 +774,62 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   className="flex-1 flex flex-col min-h-0 overflow-hidden"
                 >
                   <div id="dashboard-content" className="flex-1 flex flex-col min-h-0 px-8 pb-4 space-y-6 overflow-y-auto scrollbar-hide">
+                    {/* STATS OVERVIEW CARDS */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4 shrink-0 mt-4">
+                      <StatCard 
+                        title="Grand Total SIT" 
+                        value={sitTotalVolume} 
+                        icon={<Database />}
+                        color="blue"
+                        onClick={() => setDrilldownType("all")}
+                        clickable
+                        isPrimary
+                      />
+                      <StatCard 
+                        title="Detect Defects" 
+                        value={bugsCount} 
+                        icon={<BugIcon />}
+                        color="orange"
+                        onClick={() => setDrilldownType("bugs")}
+                        clickable
+                      />
+                      <StatCard 
+                        title="Penalty Score" 
+                        value={totalFilteredScore.toFixed(1)} 
+                        icon={<TrendingDown />}
+                        color="red"
+                        onClick={() => setDrilldownType("score")}
+                        clickable
+                      />
+                      <StatCard 
+                        title="Orphaned" 
+                        value={missingPeriodsCount} 
+                        icon={<Calendar />}
+                        color="red"
+                        onClick={() => setDrilldownType("missing")}
+                        clickable
+                      />
+                      <StatCard 
+                        title="Unmapped" 
+                        value={unmappedStatusCount} 
+                        icon={<AlertTriangle />}
+                        color="amber"
+                        onClick={() => setDrilldownType("unmapped")}
+                        clickable
+                      />
+                      <StatCard 
+                        title="Top Risk" 
+                        value={topOffender.split(' ')[0] || "N/A"} 
+                        icon={<Users />}
+                        color="purple"
+                        onClick={() => {
+                          const offender = devStats[0];
+                          if (offender) setSelectedDev(offender.devName);
+                        }}
+                        clickable
+                      />
+                    </div>
+
                     <DashboardCharts devStats={devStats} allBugs={filteredBugs} selectedSeverity={severityFilter} />
                     
                     <ExecutivePerformance devStats={devStats} onDevClick={(dev) => setSelectedDev(dev)} />

@@ -38,39 +38,36 @@ export function ExcelImport({ onDataLoaded, variant = "card" }: ExcelImportProps
         const ws = wb.Sheets[wsname];
         const rawData = XLSX.utils.sheet_to_json(ws) as any[];
 
-        const formatExcelVal = (val: any) => {
-          if (!val) return "";
-          
+        const normalizeToDate = (val: any) => {
+          if (!val) return null;
           let numVal = typeof val === 'number' ? val : parseFloat(String(val));
-          
-          // Likely an Excel serial date if it's a number in this range
           if (!isNaN(numVal) && numVal > 40000 && numVal < 60000) {
-            try {
-              const date = new Date(Math.round((numVal - 25569) * 86400 * 1000));
-              return format(date, "MMM-yyyy");
-            } catch (e) {
-              return String(val);
-            }
+            return new Date(Math.round((numVal - 25569) * 86400 * 1000));
           }
-          
           const strVal = String(val).trim();
+          if (strVal === "-" || strVal === "") return null;
           
-          // If it's a month-year string but not in MMM-yyyy, try to parse and normalize it
-          // This helps with "January 2025", "Jan 2025", "12/2024", etc.
-          if (strVal.length > 3) {
+          const possibleFormats = ["dd-MMM-yy", "dd-MMM-yyyy", "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "MMM yyyy", "MMM-yyyy"];
+          for (const fmt of possibleFormats) {
             try {
-              // Try common formats
-              const possibleFormats = ["MMM yyyy", "MMMM yyyy", "MM-yyyy", "MM/yyyy", "MMM-yy"];
-              for (const fmt of possibleFormats) {
-                try {
-                  const d = parse(strVal, fmt, new Date());
-                  if (!isNaN(d.getTime())) return format(d, "MMM-yyyy");
-                } catch (e) {}
-              }
+              const d = parse(strVal, fmt, new Date());
+              if (!isNaN(d.getTime())) return d;
             } catch (e) {}
           }
+          return null;
+        };
 
-          return strVal;
+        const formatExcelDate = (val: any) => {
+          const d = normalizeToDate(val);
+          return d ? format(d, "yyyy-MM-dd") : "";
+        };
+
+        const formatExcelPeriod = (val: any) => {
+          const d = normalizeToDate(val);
+          if (d) return format(d, "MMM-yyyy").toUpperCase();
+          const str = String(val || "").trim();
+          if (/^[A-Z]{3}-\d{4}$/i.test(str)) return str.toUpperCase();
+          return "";
         };
 
         const processedData: BugRecord[] = rawData.map((row) => {
@@ -99,7 +96,7 @@ export function ExcelImport({ onDataLoaded, variant = "card" }: ExcelImportProps
             sectionName: String(row["Section Name"] || ""),
             projectName: String(row["Project Name"] || ""),
             typeTesting: String(row["Type Testing"] || ""),
-            discoveryDate: formatExcelVal(row["Discovery Date"]),
+            discoveryDate: formatExcelDate(row["Discovery Date"]),
             type: type,
             severity: severity,
             includedInFsd: String(row["Included In FSD (Ya/Tidak)"] || "Tidak"),
@@ -107,14 +104,16 @@ export function ExcelImport({ onDataLoaded, variant = "card" }: ExcelImportProps
             screenshot: String(row["ScreenShot"] || ""),
             statusPic: String(row["Status PIC"] || ""),
             devName: String(row["Dev Name"] || "Unknown"),
-            startDate: formatExcelVal(row["Start Date"]),
-            finishAt: formatExcelVal(row["Finish Date"]),
+            startDate: formatExcelDate(row["Start Date"]),
+            finishAt: formatExcelDate(row["Finish Date"]),
             responseDev: String(row["Response Dev"] || row["Respone Dev"] || ""),
             statusDev: normalizeStatus(row["Status Dev"]),
-            sitRealizedDate: formatExcelVal(row["(SIT) Realized in Date"]),
-            periode: formatExcelVal(row["Periode"]),
+            sitRealizedDate: formatExcelDate(row["(SIT) Realized in Date"]),
+            periode: formatExcelPeriod(row["Periode"]),
             bugScore,
             total_score: bugScore,
+            last_edited_at: new Date().toISOString(),
+            last_edited_by: "System Bulk Import"
           };
         });
 

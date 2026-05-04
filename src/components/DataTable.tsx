@@ -223,7 +223,7 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
 
       {/* Table Body - Scrollable */}
       <div className="flex-1 overflow-auto scrollbar-hide relative min-h-0">
-        <table className="w-full text-left border-collapse min-w-[1400px] table-fixed">
+        <table className="w-full text-left border-collapse min-w-[1600px] table-fixed">
           <thead className="sticky top-0 z-20">
             <tr className={cn(
               "border-b backdrop-blur-md",
@@ -237,6 +237,8 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
               <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] text-center w-[100px] whitespace-nowrap">Impact</th>
               <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] w-[180px] whitespace-nowrap">SIT Realization</th>
               <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] w-[400px] whitespace-nowrap">Dev Status / Remarks</th>
+              <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] w-[180px] whitespace-nowrap">Last Updated</th>
+              <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] w-[150px] whitespace-nowrap">Updated By</th>
               <th className="px-6 py-3 text-[9px] font-black uppercase tracking-[0.2em] w-[130px] whitespace-nowrap text-right">Periode</th>
             </tr>
           </thead>
@@ -311,7 +313,13 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-1 justify-center">
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Realized: {bug.sitRealizedDate || "TBA"}</span>
+                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">
+                        Realized: {bug.sitRealizedDate && bug.sitRealizedDate !== "-" ? (
+                          /^\d{4}-\d{2}-\d{2}$/.test(bug.sitRealizedDate) 
+                            ? format(new Date(bug.sitRealizedDate), "dd-MMM-yyyy").toUpperCase()
+                            : bug.sitRealizedDate
+                        ) : "TBA"}
+                      </span>
                       <span className={cn(
                         "text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded inline-block w-fit",
                         bug.includedInFsd === "Ya" 
@@ -331,6 +339,25 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
                       )}>
                         {remarksSnippet}
                       </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <Clock className="w-3 h-3 text-slate-600" />
+                        {bug.last_edited_at ? format(new Date(bug.last_edited_at), "dd-MMM-yyyy") : "SYSTEM"}
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-500 pl-4.5">
+                        {bug.last_edited_at ? format(new Date(bug.last_edited_at), "HH:mm") : "INITIAL"}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                       <User className="w-3 h-3 text-slate-600" />
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate max-w-[120px]">
+                         {bug.last_edited_by || "System Bulk Import"}
+                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -686,6 +713,9 @@ function MetaRow({
   onEdit?: (val: string) => void;
 }) {
   const isInvalid = !value || value === "-" || value === "Pending" || value === "No response recorded";
+  const displayValue = type === "date" && value && /^\d{4}-\d{2}-\d{2}$/.test(value) 
+    ? format(new Date(value), "dd-MMM-yyyy").toUpperCase() 
+    : (value || "—");
 
   const renderInput = () => {
     if (type === "select") {
@@ -731,7 +761,7 @@ function MetaRow({
             "text-[9px] font-bold uppercase tracking-tight",
             isInvalid ? "text-orange-500/60" : "text-slate-400"
           )}>
-            {value || "—"}
+            {displayValue}
             {isInvalid && <AlertCircle className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
           </span>
         )}
