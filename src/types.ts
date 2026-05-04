@@ -13,6 +13,17 @@ export interface AppUser {
   created_at?: string;
 }
 
+export interface AuditEntry {
+  id: string;
+  created_at: string;
+  actor_name: string;
+  project_name: string;
+  bug_id: string;
+  field_name: string;
+  old_value: string;
+  new_value: string;
+}
+
 export interface BugRecord {
   id?: string;
   created_at?: string;
@@ -37,6 +48,9 @@ export interface BugRecord {
   // Calculated fields
   bugScore: number;
   total_score: number;
+  // Audit Meta
+  last_edited_by?: string;
+  last_edited_at?: string;
 }
 
 export interface DevEvaluation {

@@ -28,7 +28,8 @@ import {
   ShieldAlert,
   ChevronLeft,
   TrendingUp,
-  LogOut
+  LogOut,
+  History
 } from "lucide-react";
 import { BugRecord, DevStats, SEVERITY_WEIGHTS, DevEvaluation, AppUser } from "./types";
 import { ExcelImport } from "./components/ExcelImport";
@@ -36,6 +37,8 @@ import { DashboardCharts } from "./components/Charts";
 import { DataTable } from "./components/DataTable";
 import { Leaderboard } from "./components/Leaderboard";
 import { GlobalControls } from "./components/GlobalControls";
+import { AuditLog } from "./components/AuditLog";
+import { ExecutivePerformance } from "./components/ExecutivePerformance";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -45,6 +48,7 @@ import { format, subMonths, isAfter, isBefore, parse } from "date-fns";
 import { Login } from "./components/Login";
 import { cn } from "./lib/utils";
 import { normalizeStatus, isPeriodeMissing } from "./lib/normalization";
+import { AuditEntry } from "./types";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -52,9 +56,10 @@ export default function App() {
 
   const [bugs, setBugs] = useState<BugRecord[]>([]);
   const [evaluations, setEvaluations] = useState<Record<string, string>>({});
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "leaderboard" | "data" | "controls">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "leaderboard" | "data" | "controls" | "audit">("overview");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [drilldownType, setDrilldownType] = useState<"all" | "bugs" | "score" | "missing" | "unmapped" | null>(null);
@@ -126,6 +131,19 @@ export default function App() {
         setEvaluations(evalMap);
       }
 
+      // Fetch Audit Logs (Super Admin Only)
+      if (currentUser.role === "super_admin") {
+        const { data: auditData, error: auditError } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        
+        if (!auditError && auditData) {
+          setAuditLogs(auditData as AuditEntry[]);
+        }
+      }
+
       if (bugData) {
         setBugs(bugData as BugRecord[]);
         setLastSync(new Date().toLocaleTimeString());
@@ -138,18 +156,56 @@ export default function App() {
     }
   };
 
-  const handleSaveIntegrity = async (id: string, field: 'periode' | 'statusDev', value: string) => {
+  const handleUpdateBug = async (id: string, updates: Partial<BugRecord>) => {
+    if (currentUser?.role !== "super_admin") return;
+
     try {
-      const { error } = await supabase
+      const bug = bugs.find(b => b.id === id);
+      if (!bug) return;
+
+      // Track changes for auditing
+      const changes: Partial<AuditEntry>[] = [];
+      const updatedFields: any = {
+        ...updates,
+        last_edited_by: currentUser.full_name || currentUser.email,
+        last_edited_at: new Date().toISOString()
+      };
+
+      Object.entries(updates).forEach(([key, newValue]) => {
+        const oldValue = (bug as any)[key];
+        if (oldValue !== newValue) {
+          changes.push({
+            actor_name: currentUser.full_name || currentUser.email,
+            project_name: bug.projectName,
+            bug_id: String(bug.no),
+            field_name: key,
+            old_value: String(oldValue || ""),
+            new_value: String(newValue)
+          });
+        }
+      });
+
+      // Update Bug
+      const { error: bugUpdateError } = await supabase
         .from('bugs')
-        .update({ [field]: value })
+        .update(updatedFields)
         .eq('id', id);
       
-      if (error) throw error;
+      if (bugUpdateError) throw bugUpdateError;
+
+      // Log Changes
+      if (changes.length > 0) {
+        await supabase.from('audit_logs').insert(changes);
+      }
+      
       loadData();
     } catch (err: any) {
-      alert("Persistence Failure: " + err.message);
+      alert("Accountability Update Failure: " + err.message);
     }
+  };
+
+  const handleSaveIntegrity = async (id: string, field: 'periode' | 'statusDev', value: string) => {
+    handleUpdateBug(id, { [field]: value });
   };
 
   const getPeriodeValue = (s: string) => {
@@ -420,13 +476,22 @@ export default function App() {
               collapsed={isSidebarCollapsed}
             />
             {currentUser.role === "super_admin" && (
-              <NavItem 
-                active={activeTab === "controls"} 
-                onClick={() => setActiveTab("controls")} 
-                icon={<Settings />} 
-                label="Global Controls" 
-                collapsed={isSidebarCollapsed}
-              />
+              <>
+                <NavItem 
+                  active={activeTab === "controls"} 
+                  onClick={() => setActiveTab("controls")} 
+                  icon={<Settings />} 
+                  label="Global Controls" 
+                  collapsed={isSidebarCollapsed}
+                />
+                <NavItem 
+                  active={activeTab === "audit"} 
+                  onClick={() => setActiveTab("audit")} 
+                  icon={<History />} 
+                  label="Audit Log" 
+                  collapsed={isSidebarCollapsed}
+                />
+              </>
             )}
           </nav>
         </div>
@@ -567,7 +632,7 @@ export default function App() {
             {/* INTEGRATED FILTER BAR (Sticky) */}
             <div className="px-8 mb-4 shrink-0">
               <div className="grid grid-cols-12 gap-4 items-center bg-slate-900/40 p-2 rounded-2xl border border-white/5 shadow-inner">
-              <div className="col-span-5 flex items-center gap-3 pl-3">
+              <div className="col-span-4 flex items-center gap-3 pl-3">
                 <Search className="w-4 h-4 text-slate-600 shrink-0" />
                 <input 
                   type="text" 
@@ -582,26 +647,41 @@ export default function App() {
                 <div className="h-6 w-px bg-slate-800" />
               </div>
 
-              <div className="col-span-6 flex items-center justify-end gap-4 pr-2">
+              <div className="col-span-7 flex items-center justify-end gap-3 pr-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Type:</span>
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Status:</span>
                   <select 
-                    value={typeFilter} 
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold"
+                    value={statusFilter} 
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold max-w-[100px]"
                   >
-                    <option value="All">All Types</option>
-                    <option value="Bug">Defects</option>
-                    <option value="Change Request">Requests</option>
+                    <option value="All">All Status</option>
+                    <option value="DONE">DONE</option>
+                    <option value="ON PROGRESS">PROGRESS</option>
+                    <option value="ON QUEUE">QUEUE</option>
+                    <option value="UNMAPPED">UNMAPPED</option>
                   </select>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Severity:</span>
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Type:</span>
+                  <select 
+                    value={typeFilter} 
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold max-w-[90px]"
+                  >
+                    <option value="All">All Type</option>
+                    <option value="Bug">Defect</option>
+                    <option value="Change Request">CR</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Impact:</span>
                   <select 
                     value={severityFilter} 
                     onChange={(e) => setSeverityFilter(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-[10px] focus:ring-1 focus:ring-blue-500/30 font-bold max-w-[90px]"
                   >
                     <option value="All">All Impact</option>
                     {Object.keys(SEVERITY_WEIGHTS).map(s => <option key={s} value={s}>{s}</option>)}
@@ -609,17 +689,17 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Month:</span>
+                  <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest shrink-0">Period:</span>
                   <select 
                     value={startPeriode} 
                     onChange={(e) => setStartPeriode(e.target.value)}
                     className={cn(
-                      "bg-slate-950 border rounded-lg px-2 py-1.5 text-white text-[10px] font-bold",
+                      "bg-slate-950 border rounded-lg px-2 py-1.5 text-white text-[10px] font-bold max-w-[100px]",
                       startPeriode === "MISSING" ? "border-red-500 text-red-500" : "border-slate-800"
                     )}
                   >
-                    <option value="">Select Period</option>
-                    <option value="MISSING" className="text-red-500">ORPHANED</option>
+                    <option value="">Month</option>
+                    <option value="MISSING">ORPHANED</option>
                     {uniquePeriodes.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
@@ -735,6 +815,8 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   <div id="dashboard-content" className="flex-1 flex flex-col min-h-0 px-8 pb-4 space-y-6 overflow-y-auto scrollbar-hide">
                     <DashboardCharts devStats={devStats} allBugs={filteredBugs} selectedSeverity={severityFilter} />
                     
+                    <ExecutivePerformance devStats={devStats} onDevClick={(dev) => setSelectedDev(dev)} />
+
                     <div className="flex flex-col flex-grow min-h-[600px]">
                       <div className="mb-4 flex items-center justify-between">
                         <h2 className="text-xl font-display font-bold text-white tracking-tight flex items-center gap-2">
@@ -743,7 +825,13 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                         </h2>
                         <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">SIT Transaction Feed</div>
                       </div>
-                      <DataTable bugs={filteredBugs} dark className="flex-1 rounded-3xl border border-white/5 overflow-hidden shadow-2xl" />
+                      <DataTable 
+                        bugs={filteredBugs} 
+                        dark 
+                        className="flex-1 rounded-3xl border border-white/5 overflow-hidden shadow-2xl" 
+                        currentUser={currentUser}
+                        onUpdateBug={handleUpdateBug}
+                      />
                     </div>
                   </div>
                 </motion.div>
@@ -755,8 +843,11 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="flex-1 overflow-hidden flex flex-col px-8 pt-0 pb-8"
+                  className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col px-8 pt-0 pb-8 scrollbar-hide"
                 >
+                   <div className="mb-8">
+                     <ExecutivePerformance devStats={devStats} onDevClick={(dev) => setSelectedDev(dev)} />
+                   </div>
                    <Leaderboard 
                     devStats={devStats.sort((a, b) => b.totalScore - a.totalScore)} 
                     lastSync={lastSync}
@@ -773,7 +864,13 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   exit={{ opacity: 0 }}
                   className="flex-1 px-8 pt-0 pb-8 flex flex-col overflow-hidden"
                 >
-                  <DataTable bugs={filteredBugs} dark className="flex-1 rounded-3xl border border-white/5 overflow-hidden shadow-2xl" />
+                  <DataTable 
+                    bugs={filteredBugs} 
+                    dark 
+                    className="flex-1 rounded-3xl border border-white/5 overflow-hidden shadow-2xl" 
+                    currentUser={currentUser}
+                    onUpdateBug={handleUpdateBug}
+                  />
                 </motion.div>
               )}
 
@@ -791,6 +888,18 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                     onCreate={createProfile}
                     onUpdate={updateProfile}
                   />
+                </motion.div>
+              )}
+
+              {activeTab === "audit" && currentUser?.role === "super_admin" && (
+                <motion.div
+                  key="audit"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 px-8 pt-0 pb-8 overflow-hidden flex flex-col"
+                >
+                  <AuditLog logs={auditLogs} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -863,6 +972,8 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                 dark 
                 hideFilters
                 className="flex-1 rounded-none border-0"
+                currentUser={currentUser}
+                onUpdateBug={handleUpdateBug}
               />
             </div>
           </motion.div>
@@ -897,6 +1008,8 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                 dark 
                 hideFilters
                 className="flex-1 rounded-none border-0"
+                currentUser={currentUser}
+                onUpdateBug={handleUpdateBug}
               />
             </div>
           </motion.div>

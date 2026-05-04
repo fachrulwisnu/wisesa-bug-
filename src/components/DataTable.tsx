@@ -4,19 +4,22 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, MoreHorizontal, AlertCircle, Eye, X, Bug, Info, User, Layers, Calendar as CalendarIcon, ShieldAlert } from "lucide-react";
-import { BugRecord } from "../types";
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, CheckCircle2, Clock, MoreHorizontal, AlertCircle, Eye, X, Bug, Info, User, Layers, Calendar as CalendarIcon, ShieldAlert, History, Edit3, Save } from "lucide-react";
+import { BugRecord, AppUser } from "../types";
 import { cn } from "../lib/utils";
 import { normalizeStatus } from "../lib/normalization";
 import { motion, AnimatePresence } from "motion/react";
+import { format } from "date-fns";
 
 interface DataTableProps {
   bugs: BugRecord[];
   dark?: boolean;
   hideFilters?: boolean;
+  currentUser?: AppUser | null;
+  onUpdateBug?: (id: string, updates: Partial<BugRecord>) => Promise<void>;
 }
 
-export function DataTable({ bugs, dark, className, hideFilters }: DataTableProps & { className?: string }) {
+export function DataTable({ bugs, dark, className, hideFilters, currentUser, onUpdateBug }: DataTableProps & { className?: string }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("All");
   const [devFilter, setDevFilter] = useState("All");
@@ -24,6 +27,55 @@ export function DataTable({ bugs, dark, className, hideFilters }: DataTableProps
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [selectedBug, setSelectedBug] = useState<BugRecord | null>(null);
+
+  // States for Inline Editing in Modal
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFields, setEditFields] = useState<Partial<BugRecord>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isSuperAdmin = currentUser?.role === "super_admin";
+
+  const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const YEARS = ["2024", "2025", "2026"];
+  const PERIODS = useMemo(() => {
+    const list: string[] = [];
+    YEARS.forEach(y => MONTHS.forEach(m => list.push(`${m}-${y}`)));
+    return list;
+  }, []);
+
+  const STATUS_OPTIONS = ["DONE", "ON PROGRESS", "ON QUEUE", "PENDING"];
+
+  useEffect(() => {
+    if (selectedBug) {
+      setEditFields({
+        periode: selectedBug.periode,
+        statusDev: selectedBug.statusDev,
+        includedInFsd: selectedBug.includedInFsd,
+        discoveryDate: selectedBug.discoveryDate,
+        sitRealizedDate: selectedBug.sitRealizedDate,
+        responseDev: selectedBug.responseDev,
+        statusPic: selectedBug.statusPic,
+        startDate: selectedBug.startDate,
+        finishAt: selectedBug.finishAt,
+      });
+      setIsEditing(false);
+    }
+  }, [selectedBug]);
+
+  const handleSaveEdit = async () => {
+    if (!selectedBug?.id || !onUpdateBug) return;
+    setIsSaving(true);
+    try {
+      await onUpdateBug(selectedBug.id, editFields);
+      // Update local selected bug to reflect changes
+      setSelectedBug({ ...selectedBug, ...editFields });
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const projects = Array.from(new Set(bugs.map((b) => b.projectName))).filter(Boolean);
   const developers = Array.from(new Set(bugs.map((b) => b.devName))).filter(Boolean);
@@ -408,12 +460,33 @@ export function DataTable({ bugs, dark, className, hideFilters }: DataTableProps
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedBug(null)}
-                  className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-500 transition-all active:scale-90"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {isSuperAdmin && !isEditing && (
+                    <button 
+                      onClick={() => setIsEditing(true)}
+                      className="p-2.5 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-xl text-blue-500 transition-all active:scale-95 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Adjust Data
+                    </button>
+                  )}
+                  {isEditing && (
+                    <button 
+                      onClick={handleSaveEdit}
+                      disabled={isSaving}
+                      className="p-2.5 bg-green-600 hover:bg-green-700 border border-green-500/20 rounded-xl text-white transition-all active:scale-95 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                    >
+                      {isSaving ? <Clock className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {isSaving ? "Persisting..." : "Save Changes"}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setSelectedBug(null)}
+                    className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-500 transition-all active:scale-90"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Modal Body */}
@@ -438,34 +511,133 @@ export function DataTable({ bugs, dark, className, hideFilters }: DataTableProps
                   <div className="space-y-3">
                     <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Infrastructure Metadata</h4>
                     <div className="space-y-2">
-                       <MetaRow label="FSD Included" value={selectedBug.includedInFsd} />
+                       <MetaRow 
+                         label="FSD Included" 
+                         value={selectedBug.includedInFsd} 
+                         isEditing={isEditing}
+                         type="select"
+                         options={["Ya", "Tidak"]}
+                         editValue={editFields.includedInFsd}
+                         onEdit={(val) => setEditFields({ ...editFields, includedInFsd: val })}
+                       />
                        <MetaRow label="Testing Type" value={selectedBug.typeTesting} />
-                       <MetaRow label="Discovery Date" value={selectedBug.discoveryDate} />
-                       <MetaRow label="SIT Realization" value={selectedBug.sitRealizedDate || "Pending"} />
+                       <MetaRow 
+                         label="Discovery Date" 
+                         value={selectedBug.discoveryDate} 
+                         isEditing={isEditing}
+                         type="date"
+                         editValue={editFields.discoveryDate}
+                         onEdit={(val) => setEditFields({ ...editFields, discoveryDate: val })}
+                       />
+                       <MetaRow 
+                         label="SIT Realization" 
+                         value={selectedBug.sitRealizedDate || "Pending"} 
+                         isEditing={isEditing}
+                         type="date"
+                         editValue={editFields.sitRealizedDate}
+                         onEdit={(val) => setEditFields({ ...editFields, sitRealizedDate: val })}
+                       />
                     </div>
                   </div>
                   <div className="space-y-3">
                     <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Response & Traceability</h4>
                     <div className="space-y-2">
-                       <MetaRow label="Response Dev" value={selectedBug.responseDev || "No response recorded"} />
-                       <MetaRow label="Status PIC" value={selectedBug.statusPic} />
-                       <MetaRow label="Start Date" value={selectedBug.startDate} />
-                       <MetaRow label="Finish Date" value={selectedBug.finishAt} />
+                       <MetaRow 
+                        label="Response Dev" 
+                        value={selectedBug.responseDev || "No response recorded"} 
+                        isEditing={isEditing}
+                        type="select"
+                        options={STATUS_OPTIONS}
+                        editValue={editFields.responseDev}
+                        onEdit={(val) => setEditFields({ ...editFields, responseDev: val })}
+                       />
+                       <MetaRow 
+                        label="Status PIC" 
+                        value={selectedBug.statusPic} 
+                        isEditing={isEditing}
+                        type="select"
+                        options={STATUS_OPTIONS}
+                        editValue={editFields.statusPic}
+                        onEdit={(val) => setEditFields({ ...editFields, statusPic: val })}
+                       />
+                       <MetaRow 
+                        label="Start Date" 
+                        value={selectedBug.startDate} 
+                        isEditing={isEditing}
+                        type="date"
+                        editValue={editFields.startDate}
+                        onEdit={(val) => setEditFields({ ...editFields, startDate: val })}
+                       />
+                       <MetaRow 
+                        label="Finish Date" 
+                        value={selectedBug.finishAt} 
+                        isEditing={isEditing}
+                        type="date"
+                        editValue={editFields.finishAt}
+                        onEdit={(val) => setEditFields({ ...editFields, finishAt: val })}
+                       />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="p-8 pt-0 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-3.5 h-3.5 text-slate-600" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Periode: <span className="text-white">{selectedBug.periode}</span></span>
+              <div className="p-8 pt-0 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        Periode: 
+                        {isEditing ? (
+                          <select 
+                            value={editFields.periode || ""}
+                            onChange={(e) => setEditFields({ ...editFields, periode: e.target.value })}
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">— Select Month —</option>
+                            {PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        ) : (
+                          <span className={cn("text-white px-2 py-0.5 rounded", (!selectedBug.periode || selectedBug.periode === "-") && "bg-orange-500/10 text-orange-500 border border-orange-500/20")}>
+                            {selectedBug.periode || "NOT SET"}
+                            {(!selectedBug.periode || selectedBug.periode === "-") && <AlertCircle className="w-3 h-3 inline ml-1" />}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {isEditing ? (
+                      <select 
+                        value={editFields.statusDev || ""}
+                        onChange={(e) => setEditFields({ ...editFields, statusDev: e.target.value })}
+                        className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    ) : (
+                      getStatusBadge(selectedBug.statusDev)
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {getStatusBadge(selectedBug.statusDev)}
+
+                {/* Audit Metadata Section */}
+                <div className="pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                       <History className="w-3.5 h-3.5 text-slate-600" />
+                       <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Audit Metadata</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-[9px] font-bold text-slate-500">
+                        Edited By: <span className="text-slate-300">{selectedBug.last_edited_by || "System Initial"}</span>
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-500">
+                        Last Edited: <span className="text-slate-300">{selectedBug.last_edited_at ? format(new Date(selectedBug.last_edited_at), "dd MMM yyyy, HH:mm") : "N/A"}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -496,11 +668,74 @@ function DetailCap({ label, value, icon, color }: { label: string, value: string
   );
 }
 
-function MetaRow({ label, value }: { label: string, value: string }) {
+function MetaRow({ 
+  label, 
+  value, 
+  isEditing, 
+  type = "text", 
+  options = [], 
+  editValue, 
+  onEdit 
+}: { 
+  label: string;
+  value: string;
+  isEditing?: boolean;
+  type?: "text" | "date" | "select";
+  options?: string[];
+  editValue?: string;
+  onEdit?: (val: string) => void;
+}) {
+  const isInvalid = !value || value === "-" || value === "Pending" || value === "No response recorded";
+
+  const renderInput = () => {
+    if (type === "select") {
+      return (
+        <select
+          value={editValue || ""}
+          onChange={(e) => onEdit?.(e.target.value)}
+          className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[9px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
+        >
+          <option value="">— Select —</option>
+          {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      );
+    }
+    if (type === "date") {
+      return (
+        <input
+          type="date"
+          value={editValue || ""}
+          onChange={(e) => onEdit?.(e.target.value)}
+          className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[9px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
+        />
+      );
+    }
+    return (
+      <input
+        type="text"
+        value={editValue || ""}
+        onChange={(e) => onEdit?.(e.target.value)}
+        className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[9px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
+      />
+    );
+  };
+
   return (
-    <div className="flex items-center justify-between px-1">
-      <span className="text-[9px] font-medium text-slate-600 uppercase tracking-widest">{label}</span>
-      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{value || "—"}</span>
+    <div className="flex items-center justify-between px-1 min-h-[1.5rem]">
+      <span className="text-[9px] font-medium text-slate-600 uppercase tracking-widest shrink-0 w-1/3">{label}</span>
+      <div className="flex-1 flex justify-end">
+        {isEditing && onEdit ? (
+          <div className="w-2/3">{renderInput()}</div>
+        ) : (
+          <span className={cn(
+            "text-[9px] font-bold uppercase tracking-tight",
+            isInvalid ? "text-orange-500/60" : "text-slate-400"
+          )}>
+            {value || "—"}
+            {isInvalid && <AlertCircle className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

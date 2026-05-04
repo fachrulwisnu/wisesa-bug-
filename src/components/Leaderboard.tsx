@@ -52,6 +52,7 @@ export function Leaderboard({ devStats, lastSync, onDevClick }: LeaderboardProps
             {devStats.map((stat, index) => {
               const isExtremeRisk = stat.totalScore >= 30;
               const isAtRisk = stat.totalScore > 15;
+              const isTopPerformer = stat.totalScore < 5 && stat.bugCount > 0;
               
               return (
                 <motion.tr
@@ -62,13 +63,15 @@ export function Leaderboard({ devStats, lastSync, onDevClick }: LeaderboardProps
                   onClick={() => onDevClick?.(stat.devName)}
                   className={cn(
                     "group cursor-pointer transition-all hover:bg-white/[0.02]",
-                    isExtremeRisk ? "bg-red-500/[0.03]" : isAtRisk ? "bg-amber-500/[0.02]" : ""
+                    isExtremeRisk ? "bg-red-500/[0.03]" : isAtRisk ? "bg-amber-500/[0.02]" : isTopPerformer ? "bg-emerald-500/[0.03]" : ""
                   )}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs border shadow-sm",
-                      index === 0 ? "bg-blue-600 border-blue-400 text-white" : "bg-slate-900 border-slate-800 text-slate-500"
+                      index === 0 && !isTopPerformer ? "bg-blue-600 border-blue-400 text-white" : 
+                      isTopPerformer ? "bg-emerald-600 border-emerald-400 text-white" :
+                      "bg-slate-900 border-slate-800 text-slate-500"
                     )}>
                       {index + 1}
                     </div>
@@ -78,7 +81,7 @@ export function Leaderboard({ devStats, lastSync, onDevClick }: LeaderboardProps
                       <div className="flex items-center gap-3">
                         <span className={cn(
                           "font-bold text-sm tracking-tight truncate max-w-[200px] whitespace-nowrap",
-                          isExtremeRisk ? "text-red-400" : "text-slate-200 group-hover:text-white"
+                          isExtremeRisk ? "text-red-400" : isTopPerformer ? "text-emerald-400" : "text-slate-200 group-hover:text-white"
                         )}>
                           {stat.devName}
                         </span>
@@ -90,6 +93,11 @@ export function Leaderboard({ devStats, lastSync, onDevClick }: LeaderboardProps
                         {isAtRisk && !isExtremeRisk && (
                           <span className="shrink-0 bg-amber-500/20 text-amber-500 border border-amber-500/30 text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest whitespace-nowrap">
                             Risk Warning
+                          </span>
+                        )}
+                        {isTopPerformer && (
+                          <span className="shrink-0 bg-emerald-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest whitespace-nowrap">
+                            Star Performer
                           </span>
                         )}
                       </div>
