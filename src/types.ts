@@ -1,0 +1,65 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+export type UserRole = "super_admin" | "admin";
+
+export interface AppUser {
+  id: string;
+  email: string;
+  role: UserRole;
+  full_name?: string;
+  created_at?: string;
+}
+
+export interface BugRecord {
+  id?: string;
+  created_at?: string;
+  no: number | string;
+  sectionName: string;
+  projectName: string;
+  typeTesting: string;
+  discoveryDate: string;
+  type: "Bug" | "Change Request" | string;
+  severity: "Recurring" | "Critical" | "Major" | "Minor" | "Trivia" | string;
+  includedInFsd: "Ya" | "Tidak" | string;
+  remarks: string;
+  screenshot: string;
+  statusPic: string;
+  devName: string;
+  startDate: string;
+  finishAt: string; // "Finish Date"
+  responseDev: string;
+  statusDev: string;
+  sitRealizedDate: string; // "(SIT) Realized in Date"
+  periode: string;
+  // Calculated fields
+  bugScore: number;
+  total_score: number;
+}
+
+export interface DevEvaluation {
+  dev_name: string;
+  notes: string;
+}
+
+export interface DevStats {
+  devName: string;
+  totalScore: number;
+  bugCount: number;
+  criticalCount: number;
+  majorCount: number;
+  minorCount: number;
+  triviaCount: number;
+  recurringCount: number;
+  evaluationNotes?: string;
+}
+
+export const SEVERITY_WEIGHTS: Record<string, number> = {
+  Recurring: 6,
+  Critical: 5,
+  Major: 3,
+  Minor: 1,
+  Trivia: 0.5,
+};
