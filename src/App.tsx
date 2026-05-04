@@ -409,16 +409,16 @@ export default function App() {
       #${targetId} { color-scheme: light !important; }
       #${targetId} * { 
         color-scheme: light !important;
-        /* Standardize background colors for charts during export */
         background-color: transparent !important;
         border-color: rgba(255,255,255,0.05) !important;
+        /* Force fallback for modern color functions */
+        accent-color: #3b82f6 !important;
       }
       #${targetId} .bg-slate-900 { background-color: #0f172a !important; }
       #${targetId} .bg-slate-950 { background-color: #020617 !important; }
       #${targetId} .text-white { color: #ffffff !important; }
       #${targetId} .text-slate-500 { color: #64748b !important; }
       #${targetId} text { fill: #94a3b8 !important; font-family: sans-serif !important; }
-      /* Force Hex colors for severity if oklch causes failure */
       #${targetId} .bg-red-500, #${targetId} .stroke-red-500 { color: #ef4444 !important; background-color: #ef4444 !important; }
       #${targetId} .bg-blue-500, #${targetId} .stroke-blue-500 { color: #3b82f6 !important; background-color: #3b82f6 !important; }
       #${targetId} .bg-emerald-500, #${targetId} .stroke-emerald-500 { color: #10b981 !important; background-color: #10b981 !important; }
@@ -432,15 +432,86 @@ export default function App() {
     element.style.maxHeight = "none";
     
     try {
+      // Add a slight delay to ensure Recharts/animations are finished
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(element, { 
         scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: "#020617",
         onclone: (clonedDoc) => {
-          // Additional normalization in the cloned DOM if needed
           const el = clonedDoc.getElementById(targetId);
-          if (el) el.style.padding = "20px";
+          if (el) {
+            el.style.padding = "20px";
+            
+            // Nuclear Cleanup: Purge oklch from ALL stylesheets in the cloned document
+            const styleSheets = clonedDoc.styleSheets;
+            for (let i = 0; i < styleSheets.length; i++) {
+              try {
+                const sheet = styleSheets[i];
+                const rules = sheet.cssRules || sheet.rules;
+                for (let j = rules.length - 1; j >= 0; j--) {
+                  const rule = rules[j] as CSSStyleRule;
+                  // If the rule contains oklch, it breaks most Canvas parsers
+                  if (rule.cssText && rule.cssText.includes("oklch")) {
+                    sheet.deleteRule(j);
+                  }
+                }
+              } catch (e) {
+                // Cross-origin stylesheets might throw, skip them but it's okay
+              }
+            }
+
+            // Recursive Sanitization: Convert all computed styles to fixed hex/rgb
+            const all = el.getElementsByTagName("*");
+            for (let i = 0; i < all.length; i++) {
+              const item = all[i] as HTMLElement;
+              const props = ['color', 'backgroundColor', 'borderColor', 'fill', 'stroke', 'stopColor'];
+              
+              // We force standard colors for the export to bypass the parser's oklch failure
+              props.forEach(prop => {
+                const styleValue = item.style.getPropertyValue(prop);
+                if (styleValue && styleValue.includes("oklch")) {
+                  // If it's explicitly set on the element
+                  item.style.setProperty(prop, "inherit");
+                }
+                
+                // For computed styles that might still be returning oklch
+                const computed = window.getComputedStyle(item);
+                const val = (computed as any)[prop];
+                if (val && val.includes("oklch")) {
+                  // Fallback mapping for common dashboard elements
+                  if (prop === 'backgroundColor') {
+                    if (item.classList.contains('bg-slate-900')) item.style.backgroundColor = "#0f172a";
+                    else if (item.classList.contains('bg-slate-950')) item.style.backgroundColor = "#020617";
+                    else if (item.classList.contains('bg-blue-600')) item.style.backgroundColor = "#2563eb";
+                    else if (item.classList.contains('bg-blue-500')) item.style.backgroundColor = "#3b82f6";
+                    else if (item.classList.contains('bg-red-500')) item.style.backgroundColor = "#ef4444";
+                    else if (item.classList.contains('bg-emerald-500')) item.style.backgroundColor = "#10b981";
+                    else if (item.classList.contains('bg-amber-500')) item.style.backgroundColor = "#f59e0b";
+                    else if (item.classList.contains('bg-purple-500')) item.style.backgroundColor = "#8b5cf6";
+                    else item.style.backgroundColor = "transparent";
+                  } else if (prop === 'color') {
+                    if (item.classList.contains('text-slate-500')) item.style.color = "#64748b";
+                    else if (item.classList.contains('text-blue-500')) item.style.color = "#3b82f6";
+                    else if (item.classList.contains('text-red-500')) item.style.color = "#ef4444";
+                    else if (item.classList.contains('text-emerald-500')) item.style.color = "#10b981";
+                    else item.style.color = "#ffffff";
+                  } else if (prop === 'fill') {
+                    if (item.classList.contains('fill-blue-500')) item.style.fill = "#3b82f6";
+                    else if (item.classList.contains('fill-emerald-500')) item.style.fill = "#10b981";
+                    else item.style.fill = "#94a3b8";
+                  } else if (prop === 'stroke') {
+                    item.style.stroke = "#1e293b";
+                  } else if (prop === 'stopColor') {
+                    // Fix gradients
+                    item.style.stopColor = "#3b82f6";
+                  }
+                }
+              });
+            }
+          }
         }
       });
       
@@ -1026,26 +1097,6 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                 </motion.div>
               )}
             </AnimatePresence>
-            
-            <div className="mt-auto px-8 pb-8 pt-4 flex items-center justify-between border-t border-white/5 bg-slate-950 shrink-0">
-              <div className="text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                <Database className="w-4 h-4 text-blue-500" />
-                Operational Consistency Ledger • Secure Instance
-              </div>
-              
-              <button 
-                onClick={async () => {
-                  if (confirm("DANGER: This will permanently wipe all bug records. Continue?")) {
-                    const { error } = await supabase.from('bugs').delete().neq('no', 'RESERVED_SYSTEM_ID');
-                    if (!error) loadData();
-                  }
-                }}
-                className="flex items-center gap-2 text-red-500 hover:text-red-400 transition-all text-[10px] font-black uppercase tracking-widest px-4 py-2 bg-red-500/5 rounded-xl border border-red-500/10"
-              >
-                <RefreshCcw className="w-3.5 h-3.5" />
-                Flush Audit Hub
-              </button>
-            </div>
           </div>
         )
       }
