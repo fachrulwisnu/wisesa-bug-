@@ -62,7 +62,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"overview" | "leaderboard" | "data" | "controls" | "audit">("overview");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [drilldownType, setDrilldownType] = useState<"all" | "bugs" | "score" | "missing" | "unmapped" | null>(null);
+  const [drilldownType, setDrilldownType] = useState<string | null>(null);
+  const [drilldownValue, setDrilldownValue] = useState<string | null>(null);
   const [projectInput, setProjectInput] = useState("");
   const [devInput, setDevInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -71,6 +72,21 @@ export default function App() {
   const uniqueProjects = useMemo(() => Array.from(new Set(bugs.map(b => b.projectName))).filter(Boolean), [bugs]);
   const uniqueDevs = useMemo(() => Array.from(new Set(bugs.map(b => b.devName))).filter(Boolean), [bugs]);
   const [selectedDev, setSelectedDev] = useState<string | null>(null);
+
+  const handleChartClick = (type: string, value: string) => {
+    if (type === "dev") {
+      setSelectedDev(value);
+    } else if (type === "severity") {
+      setDrilldownType("severity_filter");
+      setDrilldownValue(value);
+    } else if (type === "trend") {
+      setDrilldownType("trend_filter");
+      setDrilldownValue(value);
+    } else if (type === "variance") {
+      setDrilldownType("variance_filter");
+      setDrilldownValue(value);
+    }
+  };
   const [severityFilter, setSeverityFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
   
@@ -387,6 +403,30 @@ export default function App() {
     const element = document.getElementById(targetId);
     if (!element) return;
 
+    // PDF Compatibility Guard: Resolve color function issues for html2canvas
+    const style = document.createElement('style');
+    style.innerHTML = `
+      #${targetId} { color-scheme: light !important; }
+      #${targetId} * { 
+        color-scheme: light !important;
+        /* Standardize background colors for charts during export */
+        background-color: transparent !important;
+        border-color: rgba(255,255,255,0.05) !important;
+      }
+      #${targetId} .bg-slate-900 { background-color: #0f172a !important; }
+      #${targetId} .bg-slate-950 { background-color: #020617 !important; }
+      #${targetId} .text-white { color: #ffffff !important; }
+      #${targetId} .text-slate-500 { color: #64748b !important; }
+      #${targetId} text { fill: #94a3b8 !important; font-family: sans-serif !important; }
+      /* Force Hex colors for severity if oklch causes failure */
+      #${targetId} .bg-red-500, #${targetId} .stroke-red-500 { color: #ef4444 !important; background-color: #ef4444 !important; }
+      #${targetId} .bg-blue-500, #${targetId} .stroke-blue-500 { color: #3b82f6 !important; background-color: #3b82f6 !important; }
+      #${targetId} .bg-emerald-500, #${targetId} .stroke-emerald-500 { color: #10b981 !important; background-color: #10b981 !important; }
+      #${targetId} .bg-amber-500, #${targetId} .stroke-amber-500 { color: #f59e0b !important; background-color: #f59e0b !important; }
+      #${targetId} .bg-purple-500, #${targetId} .stroke-purple-500 { color: #8b5cf6 !important; background-color: #8b5cf6 !important; }
+    `;
+    document.head.appendChild(style);
+
     const originalStyle = element.style.overflow;
     element.style.overflow = "visible";
     element.style.maxHeight = "none";
@@ -396,7 +436,12 @@ export default function App() {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: "#020617"
+        backgroundColor: "#020617",
+        onclone: (clonedDoc) => {
+          // Additional normalization in the cloned DOM if needed
+          const el = clonedDoc.getElementById(targetId);
+          if (el) el.style.padding = "20px";
+        }
       });
       
       const imgData = canvas.toDataURL("image/png");
@@ -409,6 +454,7 @@ export default function App() {
       pdf.save(`${filename}-${new Date().toISOString().split('T')[0]}.pdf`);
     } finally {
       element.style.overflow = originalStyle;
+      document.head.removeChild(style);
     }
   };
 
@@ -599,20 +645,20 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="flex items-center bg-slate-900 border border-white/5 rounded-xl self-stretch divide-x divide-white/5 mr-2">
+                <div className="flex items-center bg-slate-900 border border-white/5 rounded-xl self-stretch divide-x divide-white/5 mr-2 shadow-xl">
                   <button 
                     onClick={exportToExcel}
-                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest"
+                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    Export Excel
+                    <Download className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+                    Master Data Export (Excel)
                   </button>
                   <button 
                     onClick={() => exportToPDF()}
-                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest"
+                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    Export PDF
+                    <Printer className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                    Full Dashboard Report (PDF)
                   </button>
                 </div>
 
@@ -883,9 +929,14 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                       allBugs={filteredBugs} 
                       selectedSeverity={severityFilter} 
                       onExportPDF={(id, name) => exportToPDF(id, name)} 
+                      onChartClick={handleChartClick}
                     />
                     
-                    <ExecutivePerformance devStats={devStats} onDevClick={(dev) => setSelectedDev(dev)} />
+                    <ExecutivePerformance 
+                      devStats={devStats} 
+                      onDevClick={(dev) => setSelectedDev(dev)} 
+                      onExportPDF={(id, name) => exportToPDF(id, name)}
+                    />
 
                     <div className="flex flex-col flex-grow min-h-[600px]">
                       <div className="mb-4 flex items-center justify-between">
@@ -901,6 +952,8 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                         className="flex-1 rounded-3xl border border-white/5 overflow-hidden shadow-2xl" 
                         currentUser={currentUser}
                         onUpdateBug={handleUpdateBug}
+                        onExportExcel={(data, filename) => exportSpecificData(data, filename)}
+                        onExportPDF={(id, filename) => exportToPDF(id, filename)}
                       />
                     </div>
                   </div>
@@ -1016,6 +1069,9 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   {drilldownType === "score" && "Governance Quality Audit"}
                   {drilldownType === "missing" && "Orphaned Records Audit"}
                   {drilldownType === "unmapped" && "Normalization Failure Audit"}
+                  {drilldownType === "severity_filter" && `Severity Audit: ${drilldownValue}`}
+                  {drilldownType === "trend_filter" && `Temporal Audit: ${drilldownValue}`}
+                  {drilldownType === "variance_filter" && `Issue Type Variance: ${drilldownValue}`}
                 </h2>
                 <p className="text-slate-500 text-[10px] mt-1 uppercase font-black tracking-widest">
                   KPI Drill-down Terminal • Access Level: Master superadmin
@@ -1025,19 +1081,34 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                 <div className="flex items-center bg-slate-800 border border-slate-700 divide-x divide-slate-700 rounded-xl">
                    <button 
                     onClick={() => {
+                      if (drilldownType === "variance_filter") {
+                        const monthBugs = bugs.filter(b => b.periode === drilldownValue && b.type === "Bug");
+                        const monthCRs = bugs.filter(b => b.periode === drilldownValue && b.type === "Change Request");
+                        
+                        const ws1 = XLSX.utils.json_to_sheet(monthBugs);
+                        const ws2 = XLSX.utils.json_to_sheet(monthCRs);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws1, "Bugs");
+                        XLSX.utils.book_append_sheet(wb, ws2, "Change Requests");
+                        XLSX.writeFile(wb, `Variance-Audit-${drilldownValue}-${new Date().toISOString().split('T')[0]}.xlsx`);
+                        return;
+                      }
+
                       const data = 
                         drilldownType === "all" ? bugs :
                         drilldownType === "bugs" ? bugs.filter(b => b.type === "Bug") :
                         drilldownType === "score" ? bugs.filter(b => b.bugScore > 0) :
                         drilldownType === "missing" ? bugs.filter(b => isPeriodeMissing(b.periode)) :
                         drilldownType === "unmapped" ? bugs.filter(b => normalizeStatus(b.statusDev) === "UNMAPPED") :
+                        drilldownType === "severity_filter" ? bugs.filter(b => b.severity === drilldownValue) :
+                        drilldownType === "trend_filter" ? bugs.filter(b => b.periode === drilldownValue) :
                         [];
                       exportSpecificData(data, `Drilldown-${drilldownType}`);
                     }}
                     className="flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    Export Excel
+                    {drilldownType === "variance_filter" ? "Master Export (Multi-Sheet)" : "Export Excel"}
                   </button>
                   <button 
                     onClick={() => exportToPDF("drilldown-content", `Drilldown-${drilldownType}`)}
@@ -1048,7 +1119,10 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   </button>
                 </div>
                 <button 
-                  onClick={() => setDrilldownType(null)}
+                  onClick={() => {
+                    setDrilldownType(null);
+                    setDrilldownValue(null);
+                  }}
                   className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-colors text-white"
                 >
                   <X className="w-6 h-6" />
@@ -1056,22 +1130,61 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
               </div>
             </div>
             
-            <div id="drilldown-content" className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col">
-              <DataTable 
-                bugs={
-                  drilldownType === "all" ? bugs :
-                  drilldownType === "bugs" ? bugs.filter(b => b.type === "Bug") :
-                  drilldownType === "score" ? bugs.filter(b => b.bugScore > 0) :
-                  drilldownType === "missing" ? bugs.filter(b => isPeriodeMissing(b.periode)) :
-                  drilldownType === "unmapped" ? bugs.filter(b => normalizeStatus(b.statusDev) === "UNMAPPED") :
-                  []
-                } 
-                dark 
-                hideFilters
-                className="flex-1 rounded-none border-0"
-                currentUser={currentUser}
-                onUpdateBug={handleUpdateBug}
-              />
+            <div id="drilldown-content" className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col overflow-y-auto">
+              {drilldownType === "variance_filter" ? (
+                <div className="flex flex-col h-full divide-y divide-slate-800">
+                  <div className="flex-1 min-h-[400px] flex flex-col">
+                    <div className="px-8 py-4 bg-slate-900/30 flex items-center gap-3">
+                      <div className="w-1 h-4 bg-amber-500 rounded-full" />
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Detailed Bug Records ({drilldownValue})</h3>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <DataTable 
+                        bugs={bugs.filter(b => b.periode === drilldownValue && b.type === "Bug")} 
+                        dark 
+                        hideFilters
+                        className="h-full rounded-none border-0"
+                        currentUser={currentUser}
+                        onUpdateBug={handleUpdateBug}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-h-[400px] flex flex-col">
+                    <div className="px-8 py-4 bg-slate-900/30 flex items-center gap-3">
+                      <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Detailed Change Request Records ({drilldownValue})</h3>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <DataTable 
+                        bugs={bugs.filter(b => b.periode === drilldownValue && b.type === "Change Request")} 
+                        dark 
+                        hideFilters
+                        className="h-full rounded-none border-0"
+                        currentUser={currentUser}
+                        onUpdateBug={handleUpdateBug}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <DataTable 
+                  bugs={
+                    drilldownType === "all" ? bugs :
+                    drilldownType === "bugs" ? bugs.filter(b => b.type === "Bug") :
+                    drilldownType === "score" ? bugs.filter(b => b.bugScore > 0) :
+                    drilldownType === "missing" ? bugs.filter(b => isPeriodeMissing(b.periode)) :
+                    drilldownType === "unmapped" ? bugs.filter(b => normalizeStatus(b.statusDev) === "UNMAPPED") :
+                    drilldownType === "severity_filter" ? bugs.filter(b => b.severity === drilldownValue) :
+                    drilldownType === "trend_filter" ? bugs.filter(b => b.periode === drilldownValue) :
+                    []
+                  } 
+                  dark 
+                  hideFilters
+                  className="flex-1 rounded-none border-0"
+                  currentUser={currentUser}
+                  onUpdateBug={handleUpdateBug}
+                />
+              )}
             </div>
           </motion.div>
         </div>

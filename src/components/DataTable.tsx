@@ -17,9 +17,11 @@ interface DataTableProps {
   hideFilters?: boolean;
   currentUser?: AppUser | null;
   onUpdateBug?: (id: string, updates: Partial<BugRecord>) => Promise<void>;
+  onExportExcel?: (data: BugRecord[], filename: string) => void;
+  onExportPDF?: (id: string, filename: string) => void;
 }
 
-export function DataTable({ bugs, dark, className, hideFilters, currentUser, onUpdateBug }: DataTableProps & { className?: string }) {
+export function DataTable({ bugs, dark, className, hideFilters, currentUser, onUpdateBug, onExportExcel, onExportPDF }: DataTableProps & { className?: string }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("All");
   const [devFilter, setDevFilter] = useState("All");
@@ -184,7 +186,7 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
     )}>
       {/* Tier 1: Internal Search/Filters (Fixed) */}
       {!hideFilters && (
-        <div className={cn(
+        <div id="data-explorer-header" className={cn(
           "p-4 border-b flex flex-col md:flex-row gap-4 items-center justify-between shrink-0 z-30",
           dark ? "bg-slate-900 border-slate-800 shadow-lg" : "bg-white border-slate-100"
         )}>
@@ -202,7 +204,26 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
             />
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center bg-slate-950 border border-slate-800 divide-x divide-slate-800 rounded-lg overflow-hidden">
+              <button 
+                onClick={() => onExportExcel?.(filteredBugs, "Live-Governance-Ledger")}
+                className="flex items-center gap-2 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all hover:bg-slate-900"
+                title="Export Filtered List to Excel"
+              >
+                <Bug className="w-3 h-3" />
+                Excel
+              </button>
+              <button 
+                onClick={() => onExportPDF?.("live-governance-ledger-container", "Live-Governance-Ledger")}
+                className="flex items-center gap-2 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all hover:bg-slate-900"
+                title="Export Table to PDF"
+              >
+                <MoreHorizontal className="w-3 h-3" />
+                PDF
+              </button>
+            </div>
+
             <select
               className={cn(
                 "h-8 px-3 border rounded-lg text-[9px] font-black uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-500/10",
@@ -222,7 +243,7 @@ export function DataTable({ bugs, dark, className, hideFilters, currentUser, onU
       )}
 
       {/* Table Body - Scrollable */}
-      <div className="flex-1 overflow-auto scrollbar-hide relative min-h-0">
+      <div id="live-governance-ledger-container" className="flex-1 overflow-auto scrollbar-hide relative min-h-0">
         <table className="w-full text-left border-collapse min-w-[1600px] table-fixed">
           <thead className="sticky top-0 z-20">
             <tr className={cn(

@@ -27,6 +27,7 @@ interface DashboardChartsProps {
   allBugs: BugRecord[];
   selectedSeverity?: string;
   onExportPDF?: (id: string, name: string) => void;
+  onChartClick?: (type: string, value: string) => void;
 }
 
 const COLORS = {
@@ -37,7 +38,7 @@ const COLORS = {
   Trivia: "#10B981",    // Green
 };
 
-export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportPDF }: DashboardChartsProps) {
+export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportPDF, onChartClick }: DashboardChartsProps) {
   // Severity Distribution Data
   const severityCounts = allBugs.reduce((acc: any, bug) => {
     acc[bug.severity] = (acc[bug.severity] || 0) + 1;
@@ -97,9 +98,29 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
   const categories = ["Recurring", "Critical", "Major", "Minor", "Trivia"];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-      {/* Dev Quality Ranking */}
-      <div id="chart-dev-ranking" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
+    <div className="space-y-10 mb-10">
+      {/* Combined Group 1: Personnel & Severity */}
+      <div id="chart-matrix-group" className="space-y-6">
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
+            <div>
+              <h2 className="text-xl font-display font-bold text-white tracking-tight">Personnel & Severity Matrix</h2>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-0.5">Cross-sectional impact analysis</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => onExportPDF?.("chart-matrix-group", "Personnel-Severity-Matrix")}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group shadow-lg"
+          >
+            <Printer className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+            Capture Matrix PDF
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Dev Quality Ranking */}
+          <div id="chart-dev-ranking" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-3xl rounded-full" />
         
         <div className="flex items-center justify-between mb-6">
@@ -115,7 +136,15 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
 
         <div className="h-[280px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={devStats.slice(0, 10)} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <BarChart 
+              data={devStats.slice(0, 10)} 
+              margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+              onClick={(data: any) => {
+                if (data && data.activePayload && data.activePayload[0]) {
+                  onChartClick?.("dev", String(data.activePayload[0].payload.devName));
+                }
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" strokeOpacity={0.5} />
               <XAxis dataKey="devName" fontSize={10} tickLine={false} axisLine={false} tick={{ fill: '#64748b' }} />
               <YAxis fontSize={10} tickLine={false} axisLine={false} tick={{ fill: '#64748b' }} />
@@ -165,6 +194,11 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
                 dataKey="value"
                 label={({ name, percent }) => `${name.toUpperCase()} ${(percent * 100).toFixed(0)}%`}
                 labelLine={false}
+                onClick={(data: any) => {
+                  if (data && data.name) {
+                    onChartClick?.("severity", String(data.name));
+                  }
+                }}
               >
                 {severityData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS] || "#CBD5E1"} stroke="none" />
@@ -176,10 +210,13 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
           </ResponsiveContainer>
         </div>
       </div>
+    </div>
+  </div>
 
-      {/* Monthly SIT Trend (Stacked Area) */}
-      <div id="chart-sit-trend" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group">
-        <div className="flex items-center justify-between mb-8">
+  {/* Monthly SIT Trend (Stacked Area) */}
+      <div id="chart-sit-trend" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none" />
+        <div className="flex items-center justify-between mb-8 relative z-10">
           <div>
             <h3 className="text-lg font-display font-bold text-white tracking-tight">Monthly SIT Resilience Trend</h3>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Cross-sectional volume analysis</p>
@@ -192,16 +229,24 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
             )}
             <button 
               onClick={() => onExportPDF?.("chart-sit-trend", "Monthly-SIT-Trend")}
-              className="p-2 transition-all text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
-              title="Export to PDF"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group shadow-lg"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+              Capture Trend PDF
             </button>
           </div>
         </div>
         <div className="h-[320px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trendChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <AreaChart 
+              data={trendChartData} 
+              margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+              onClick={(data: any) => {
+                if (data && data.activeLabel) {
+                  onChartClick?.("trend", String(data.activeLabel));
+                }
+              }}
+            >
               <defs>
                 {categories.map(cat => (
                   <linearGradient key={`grad-${cat}`} id={`color-${cat}`} x1="0" y1="0" x2="0" y2="1">
@@ -247,23 +292,32 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportP
       </div>
 
       {/* Bug vs CR Comparison */}
-      <div id="chart-issue-variance" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group">
-        <div className="flex items-center justify-between mb-8">
+      <div id="chart-issue-variance" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] rounded-full pointer-events-none" />
+        <div className="flex items-center justify-between mb-8 relative z-10">
           <div>
             <h3 className="text-lg font-display font-bold text-white tracking-tight">Issue Type Variance</h3>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Bug vs Change Request distribution</p>
           </div>
           <button 
             onClick={() => onExportPDF?.("chart-issue-variance", "Issue-Type-Variance")}
-            className="p-2 transition-all text-slate-600 hover:text-amber-500 hover:bg-amber-500/10 rounded-xl"
-            title="Export to PDF"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group shadow-lg"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+            Capture Variance PDF
           </button>
         </div>
         <div className="h-[280px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <BarChart 
+              data={trendChartData} 
+              margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+              onClick={(data: any) => {
+                if (data && data.activeLabel) {
+                  onChartClick?.("variance", String(data.activeLabel));
+                }
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" strokeOpacity={0.5} />
               <XAxis dataKey="periode" fontSize={10} tickLine={false} axisLine={false} tick={{ fill: '#64748b' }} />
               <YAxis fontSize={10} tickLine={false} axisLine={false} tick={{ fill: '#64748b' }} />

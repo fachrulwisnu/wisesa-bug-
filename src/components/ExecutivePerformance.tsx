@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { TrendingDown, Star, ArrowUpRight, ArrowDownRight, AlertCircle, ShieldCheck } from "lucide-react";
+import { TrendingDown, Star, ArrowUpRight, ArrowDownRight, AlertCircle, ShieldCheck, Printer } from "lucide-react";
 import { DevStats } from "../types";
 import { motion } from "motion/react";
 import { cn } from "../lib/utils";
@@ -12,9 +12,10 @@ import { cn } from "../lib/utils";
 interface ExecutivePerformanceProps {
   devStats: DevStats[];
   onDevClick: (devName: string) => void;
+  onExportPDF?: (id: string, fileName: string) => void;
 }
 
-export function ExecutivePerformance({ devStats, onDevClick }: ExecutivePerformanceProps) {
+export function ExecutivePerformance({ devStats, onDevClick, onExportPDF }: ExecutivePerformanceProps) {
   // Sort for Top Risk (Highest Score)
   const topRisk = [...devStats].sort((a, b) => b.totalScore - a.totalScore).slice(0, 3);
   
@@ -28,9 +29,24 @@ export function ExecutivePerformance({ devStats, onDevClick }: ExecutivePerforma
   const finalPerformers = topPerformers.length > 0 ? topPerformers : [...devStats].sort((a, b) => a.totalScore - b.totalScore).slice(0, 3);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-      {/* Top Performers (Emerald) */}
-      <div className="bg-slate-900 border border-emerald-500/10 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+    <div id="executive-performance-section" className="space-y-6 mb-8">
+      <div className="flex items-center justify-between px-4">
+        <div className="flex items-center gap-3">
+          <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+          <h2 className="text-xl font-display font-bold text-white tracking-tight">Personnel Performance & Risk</h2>
+        </div>
+        <button 
+          onClick={() => onExportPDF?.("executive-performance-section", "Personnel-Performance-Audit")}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest group"
+        >
+          <Printer className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+          Export Performance PDF
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Top Performers (Emerald) */}
+        <div className="bg-slate-900 border border-emerald-500/10 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
         <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
           <Star className="w-32 h-32 text-emerald-500" />
         </div>
@@ -125,5 +141,6 @@ export function ExecutivePerformance({ devStats, onDevClick }: ExecutivePerforma
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
