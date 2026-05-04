@@ -1,6 +1,6 @@
 {
-  "name": "Wisesa BugTracker Pro",
-  "description": "Automated SIT Governance Hub for Project Wisesa to streamline admin workflows and developer accountability.",
+  "name": "Wisesa Bug Dashboard",
+  "description": "Master Governance & Accountability Terminal for SIT Data Quality Management. System version v1.0.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

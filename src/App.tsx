@@ -372,25 +372,56 @@ export default function App() {
 
   const exportToExcel = () => {
     // Export ONLY filtered data
-    const ws = XLSX.utils.json_to_sheet(filteredBugs);
+    const exportData = filteredBugs.map(b => ({
+      ...b,
+      'Last Updated': b.last_edited_at ? format(new Date(b.last_edited_at), 'dd-MMM-yyyy HH:mm') : 'INITIAL',
+      'Updated By': b.last_edited_by || 'System Bulk Import'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Filtered Bug Data");
-    XLSX.writeFile(wb, `BugTracker-Filtered-Report-${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Governance Audit Report");
+    XLSX.writeFile(wb, `Wisesa-Governance-Audit-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const exportToPDF = async () => {
-    const element = document.getElementById("dashboard-content");
+  const exportToPDF = async (targetId: string = "dashboard-content", filename: string = "Executive-Summary") => {
+    const element = document.getElementById(targetId);
     if (!element) return;
 
-    const canvas = await html2canvas(element, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    const originalStyle = element.style.overflow;
+    element.style.overflow = "visible";
+    element.style.maxHeight = "none";
     
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`Executive-Summary-${new Date().toISOString().split('T')[0]}.pdf`);
+    try {
+      const canvas = await html2canvas(element, { 
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#020617"
+      });
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(pdfHeight, 297)); 
+      pdf.save(`${filename}-${new Date().toISOString().split('T')[0]}.pdf`);
+    } finally {
+      element.style.overflow = originalStyle;
+    }
+  };
+
+  const exportSpecificData = (data: BugRecord[], filename: string) => {
+    const exportData = data.map(b => ({
+      ...b,
+      'Last Updated': b.last_edited_at ? format(new Date(b.last_edited_at), 'dd-MMM-yyyy HH:mm') : 'INITIAL',
+      'Updated By': b.last_edited_by || 'System Bulk Import'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Audit Export");
+    XLSX.writeFile(wb, `${filename}-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const addManualRecord = async (newBug: Partial<BugRecord>) => {
@@ -450,8 +481,8 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 className="whitespace-nowrap"
               >
-                <span className="font-display font-bold text-xl tracking-tight block">Wisesa BugTracker</span>
-                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em]">V1.0</span>
+                <span className="font-display font-bold text-xl tracking-tight block">Wisesa Bug Dashboard</span>
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em]">v1.0</span>
               </motion.div>
             )}
             {isSidebarCollapsed && (
@@ -561,13 +592,30 @@ export default function App() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-display font-bold text-white tracking-tight flex items-center gap-3">
-                  Wisesa BugTracker Pro
+                  Wisesa Bug Dashboard
                   <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[10px] font-black text-blue-500 uppercase tracking-widest">v1.0</span>
                 </h1>
                 <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mt-1">SIT Governance & Data Quality Command Center</p>
               </div>
 
               <div className="flex items-center gap-3">
+                <div className="flex items-center bg-slate-900 border border-white/5 rounded-xl self-stretch divide-x divide-white/5 mr-2">
+                  <button 
+                    onClick={exportToExcel}
+                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export Excel
+                  </button>
+                  <button 
+                    onClick={() => exportToPDF()}
+                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Export PDF
+                  </button>
+                </div>
+
                 <ExcelImport variant="compact" onDataLoaded={() => loadData()} />
                 <button 
                   onClick={() => setIsManualModalOpen(true)}
@@ -830,7 +878,12 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                       />
                     </div>
 
-                    <DashboardCharts devStats={devStats} allBugs={filteredBugs} selectedSeverity={severityFilter} />
+                    <DashboardCharts 
+                      devStats={devStats} 
+                      allBugs={filteredBugs} 
+                      selectedSeverity={severityFilter} 
+                      onExportPDF={(id, name) => exportToPDF(id, name)} 
+                    />
                     
                     <ExecutivePerformance devStats={devStats} onDevClick={(dev) => setSelectedDev(dev)} />
 
@@ -968,15 +1021,42 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                   KPI Drill-down Terminal • Access Level: Master superadmin
                 </p>
               </div>
-              <button 
-                onClick={() => setDrilldownType(null)}
-                className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-colors text-white"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center bg-slate-800 border border-slate-700 divide-x divide-slate-700 rounded-xl">
+                   <button 
+                    onClick={() => {
+                      const data = 
+                        drilldownType === "all" ? bugs :
+                        drilldownType === "bugs" ? bugs.filter(b => b.type === "Bug") :
+                        drilldownType === "score" ? bugs.filter(b => b.bugScore > 0) :
+                        drilldownType === "missing" ? bugs.filter(b => isPeriodeMissing(b.periode)) :
+                        drilldownType === "unmapped" ? bugs.filter(b => normalizeStatus(b.statusDev) === "UNMAPPED") :
+                        [];
+                      exportSpecificData(data, `Drilldown-${drilldownType}`);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export Excel
+                  </button>
+                  <button 
+                    onClick={() => exportToPDF("drilldown-content", `Drilldown-${drilldownType}`)}
+                    className="flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Export PDF
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setDrilldownType(null)}
+                  className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-colors text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
             
-            <div className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col">
+            <div id="drilldown-content" className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col">
               <DataTable 
                 bugs={
                   drilldownType === "all" ? bugs :
@@ -1012,14 +1092,35 @@ CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
                 <h2 className="text-3xl font-display font-bold text-white tracking-tight">Detail Issues: {selectedDev}</h2>
                 <p className="text-slate-500 text-[10px] mt-1 uppercase font-black tracking-widest">Incident History Drill-down • Access Level: Master superadmin</p>
               </div>
-              <button 
-                onClick={() => setSelectedDev(null)}
-                className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-colors text-white"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center bg-slate-800 border border-slate-700 divide-x divide-slate-700 rounded-xl">
+                   <button 
+                    onClick={() => {
+                      const data = filteredBugs.filter(b => b.devName === selectedDev);
+                      exportSpecificData(data, `Dev-Audit-${selectedDev}`);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export Excel
+                  </button>
+                  <button 
+                    onClick={() => exportToPDF("dev-drilldown-content", `Dev-Audit-${selectedDev}`)}
+                    className="flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Export PDF
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setSelectedDev(null)}
+                  className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-colors text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col">
+            <div id="dev-drilldown-content" className="flex-1 min-h-0 bg-slate-950 p-0 flex flex-col">
               <DataTable 
                 bugs={filteredBugs.filter(b => b.devName === selectedDev)} 
                 dark 

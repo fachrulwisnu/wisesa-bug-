@@ -20,11 +20,13 @@ import {
   Area,
 } from "recharts";
 import { BugRecord, DevStats } from "../types";
+import { FileDown, Printer } from "lucide-react";
 
 interface DashboardChartsProps {
   devStats: DevStats[];
   allBugs: BugRecord[];
   selectedSeverity?: string;
+  onExportPDF?: (id: string, name: string) => void;
 }
 
 const COLORS = {
@@ -35,7 +37,7 @@ const COLORS = {
   Trivia: "#10B981",    // Green
 };
 
-export function DashboardCharts({ devStats, allBugs, selectedSeverity }: DashboardChartsProps) {
+export function DashboardCharts({ devStats, allBugs, selectedSeverity, onExportPDF }: DashboardChartsProps) {
   // Severity Distribution Data
   const severityCounts = allBugs.reduce((acc: any, bug) => {
     acc[bug.severity] = (acc[bug.severity] || 0) + 1;
@@ -97,9 +99,20 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity }: Dashboa
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       {/* Dev Quality Ranking */}
-      <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
+      <div id="chart-dev-ranking" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-3xl rounded-full" />
-        <h3 className="text-lg font-display font-bold mb-6 text-white tracking-tight">Personnel Governance Ranking</h3>
+        
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-display font-bold text-white tracking-tight">Personnel Governance Ranking</h3>
+          <button 
+            onClick={() => onExportPDF?.("chart-dev-ranking", "Personnel-Governance-Ranking")}
+            className="p-2 transition-all text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
+            title="Export to PDF"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+        </div>
+
         <div className="h-[280px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={devStats.slice(0, 10)} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
@@ -127,9 +140,20 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity }: Dashboa
       </div>
 
       {/* Severity Distribution */}
-      <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden">
+      <div id="chart-severity-index" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl relative overflow-hidden group">
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/5 blur-3xl rounded-full" />
-        <h3 className="text-lg font-display font-bold mb-6 text-white tracking-tight">Systemic Severity Index</h3>
+        
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-display font-bold text-white tracking-tight">Systemic Severity Index</h3>
+          <button 
+            onClick={() => onExportPDF?.("chart-severity-index", "Systemic-Severity-Index")}
+            className="p-2 transition-all text-slate-600 hover:text-purple-500 hover:bg-purple-500/10 rounded-xl"
+            title="Export to PDF"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+        </div>
+
         <div className="h-[280px] w-full flex items-center justify-center min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -154,17 +178,26 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity }: Dashboa
       </div>
 
       {/* Monthly SIT Trend (Stacked Area) */}
-      <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+      <div id="chart-sit-trend" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group">
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h3 className="text-lg font-display font-bold text-white tracking-tight">Monthly SIT Resilience Trend</h3>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Cross-sectional volume analysis</p>
           </div>
-          {selectedSeverity && selectedSeverity !== "All" && (
-            <span className="text-[9px] bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-full font-black uppercase tracking-widest border border-blue-500/20">
-              Isolating: {selectedSeverity}
-            </span>
-          )}
+          <div className="flex items-center gap-4">
+            {selectedSeverity && selectedSeverity !== "All" && (
+              <span className="text-[9px] bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-full font-black uppercase tracking-widest border border-blue-500/20">
+                Isolating: {selectedSeverity}
+              </span>
+            )}
+            <button 
+              onClick={() => onExportPDF?.("chart-sit-trend", "Monthly-SIT-Trend")}
+              className="p-2 transition-all text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl"
+              title="Export to PDF"
+            >
+              <Printer className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <div className="h-[320px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -214,12 +247,19 @@ export function DashboardCharts({ devStats, allBugs, selectedSeverity }: Dashboa
       </div>
 
       {/* Bug vs CR Comparison */}
-      <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2">
+      <div id="chart-issue-variance" className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl lg:col-span-2 group">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h3 className="text-lg font-display font-bold text-white tracking-tight">Issue Type Variance</h3>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Bug vs Change Request distribution</p>
           </div>
+          <button 
+            onClick={() => onExportPDF?.("chart-issue-variance", "Issue-Type-Variance")}
+            className="p-2 transition-all text-slate-600 hover:text-amber-500 hover:bg-amber-500/10 rounded-xl"
+            title="Export to PDF"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
         </div>
         <div className="h-[280px] w-full min-h-0 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
